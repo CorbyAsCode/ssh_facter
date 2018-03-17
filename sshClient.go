@@ -11,14 +11,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const (
-	//CERT_PASSWORD = 1
-	//CERT_PUBLIC_KEY_FILE = 2
-	DEFAULT_TIMEOUT = 3 // second
-)
+const defaultTimeout = 3 // second
 
-type SSH struct {
-	Ip      string
+type sshClient struct {
+	IP      string
 	User    string
 	Cert    string //password or key file path
 	Port    int
@@ -26,7 +22,7 @@ type SSH struct {
 	client  *ssh.Client
 }
 
-func (ssh_client *SSH) readPublicKeyFile(file string) ssh.AuthMethod {
+func (ssh_client *sshClient) readPublicKeyFile(file string) ssh.AuthMethod {
 	buffer, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil
@@ -39,23 +35,23 @@ func (ssh_client *SSH) readPublicKeyFile(file string) ssh.AuthMethod {
 	return ssh.PublicKeys(key)
 }
 
-func (ssh_client *SSH) Connect() {
+func (ssh_client *sshClient) Connect() {
 
-	var ssh_config *ssh.ClientConfig
+	var sshConfig *ssh.ClientConfig
 	var auth []ssh.AuthMethod
 	auth = []ssh.AuthMethod{ssh_client.readPublicKeyFile(ssh_client.Cert)}
 
-	ssh_config = &ssh.ClientConfig{
+	sshConfig = &ssh.ClientConfig{
 		User: ssh_client.User,
 		Auth: auth,
 		// HostKeyCallback
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			return nil
 		},
-		Timeout: time.Second * DEFAULT_TIMEOUT,
+		Timeout: time.Second * defaultTimeout,
 	}
 
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", ssh_client.Ip, ssh_client.Port), ssh_config)
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", ssh_client.IP, ssh_client.Port), sshConfig)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -72,15 +68,16 @@ func (ssh_client *SSH) Connect() {
 	ssh_client.client = client
 }
 
-func (ssh_client *SSH) RunCmd(cmd string) {
+func (ssh_client *sshClient) RunCmd(cmd string) []byte {
 	out, err := ssh_client.session.Output(cmd)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Print(string(out))
+
+	return out
 }
 
-func (ssh_client *SSH) Close() {
+func (ssh_client *sshClient) Close() {
 	ssh_client.session.Close()
 	ssh_client.client.Close()
 }
