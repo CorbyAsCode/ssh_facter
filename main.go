@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 type person struct {
@@ -12,8 +13,7 @@ type person struct {
 
 func sshWorker(host chan string, r chan person) {
 	//host := "10.0.0.2"
-	user := "root"
-	sshKeyPath := "/Users/corbyshaner/.ssh/id_rsa"
+
 	var somebody person
 
 	client := &sshClient{
@@ -37,11 +37,12 @@ func sshWorker(host chan string, r chan person) {
 
 }
 
-func concatStuff(h <-chan string, r chan<- string) {
+func concatStuff(h string, out chan<- string) {
+
 	fmt.Println("created goroutine")
-	s := <-h
-	result := s + "more"
-	r <- result
+	result := h + "more"
+	//fmt.Println(result)
+	out <- result
 }
 
 func multiplyByTwo(in <-chan int, out chan<- int) {
@@ -50,6 +51,9 @@ func multiplyByTwo(in <-chan int, out chan<- int) {
 	result := num * 2
 	out <- result
 }
+
+const user = "root"
+const sshKeyPath = "/Users/corbyshaner/.ssh/id_rsa"
 
 func main() {
 
@@ -64,16 +68,58 @@ func main() {
 	  Pull outputs off of the channel and print them
 	*/
 
-	receiver := make(chan string)
-	hosts := make(chan string)
+	hosts := []string{"10.0.0.2", "10.0.0.10"}
+	outputs := make(chan person, len(hosts))
+	var wg sync.WaitGroup
 
-	go concatStuff(hosts, receiver)
-	go concatStuff(hosts, receiver)
+	for _, host := range hosts {
+		wg.Add(1)
+		go func(host string) {
+			defer wg.Done()
+			var somebody person
 
-	hosts <- "10.0.0.2"
-	hosts <- "10.0.0.10"
-	fmt.Println(<-receiver)
-	fmt.Println(<-receiver)
+			client := &sshClient{
+				IP:   host,
+				User: user,
+				Port: 22,
+				Cert: sshKeyPath,
+			}
+			client.Connect()
+			output := client.RunCmd("cat test.json")
+			client.Close()
+			err := json.Unmarshal(output, &somebody)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			outputs <- somebody
+		}(host)
+
+		/* This works
+		go func(h string) {
+			defer wg.Done()
+			fmt.Println("created goroutine")
+			result := h + "more"
+			//fmt.Println(result)
+			outputs <- result
+			//fmt.Println("Waiting for receiver to be received.")
+		}(host)
+		*/
+	}
+
+	go func() {
+		wg.Wait()
+		fmt.Println("Closing receiver")
+		close(outputs)
+
+	}()
+
+	for s := range outputs {
+		fmt.Println(s)
+	}
+
+	//fmt.Println(<-receiver)
+	//fmt.Println(<-receiver)
 	//go fmt.Println(<-receiver)
 
 	/*
