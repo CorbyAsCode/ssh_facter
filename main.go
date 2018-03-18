@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 )
 
 type person struct {
@@ -69,17 +68,17 @@ func main() {
 	*/
 
 	hosts := []string{"10.0.0.2", "10.0.0.10"}
+	inputs := make(chan string, len(hosts))
 	outputs := make(chan person, len(hosts))
-	var wg sync.WaitGroup
 
-	for _, host := range hosts {
-		wg.Add(1)
-		go func(host string) {
-			defer wg.Done()
+	for i := 1; i < 3; i++ {
+		fmt.Println("Creating goroutine")
+		go func() {
+			//defer wg.Done()
 			var somebody person
 
 			client := &sshClient{
-				IP:   host,
+				IP:   <-inputs,
 				User: user,
 				Port: 22,
 				Cert: sshKeyPath,
@@ -93,19 +92,19 @@ func main() {
 			}
 
 			outputs <- somebody
-		}(host)
+		}()
 
 	}
 
-	go func() {
-		wg.Wait()
-		fmt.Println("Closing receiver")
-		close(outputs)
+	for _, host := range hosts {
+		fmt.Println("Adding host")
+		inputs <- host
+	}
+	close(inputs)
 
-	}()
-
-	for s := range outputs {
-		fmt.Println(s)
+	for i := 0; i < len(hosts); i++ {
+		fmt.Printf("Processing #%d", i)
+		fmt.Println(<-outputs)
 	}
 
 }
