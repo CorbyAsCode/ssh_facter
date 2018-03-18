@@ -95,16 +95,6 @@ func main() {
 			outputs <- somebody
 		}(host)
 
-		/* This works
-		go func(h string) {
-			defer wg.Done()
-			fmt.Println("created goroutine")
-			result := h + "more"
-			//fmt.Println(result)
-			outputs <- result
-			//fmt.Println("Waiting for receiver to be received.")
-		}(host)
-		*/
 	}
 
 	go func() {
@@ -118,30 +108,4 @@ func main() {
 		fmt.Println(s)
 	}
 
-	//fmt.Println(<-receiver)
-	//fmt.Println(<-receiver)
-	//go fmt.Println(<-receiver)
-
-	/*
-		//go fmt.Println(<-receiver)
-		out := make(chan int)
-		in := make(chan int)
-
-		// Create 3 `multiplyByTwo` goroutines.
-		go multiplyByTwo(in, out)
-		go multiplyByTwo(in, out)
-		go multiplyByTwo(in, out)
-
-		// Up till this point, none of the created goroutines actually do
-		// anything, since they are all waiting for the `in` channel to
-		// receive some data
-		in <- 1
-		in <- 2
-		in <- 3
-
-		// Now we wait for each result to come in
-		fmt.Println(<-out)
-		fmt.Println(<-out)
-		fmt.Println(<-out)
-	*/
 }
