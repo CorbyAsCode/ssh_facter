@@ -8,13 +8,84 @@ import (
 	"sync"
 )
 
-type person struct {
-	Name     string `json:"name"`
-	Location string `json:"location"`
+type facterOut struct {
+	Kernel                 string `json:"kernel"`
+	Architecture           string `json:"architecture"`
+	KernelMajorVersion     string `json:"kernelmajversion"`
+	KernelRelease          string `json:"kernelrelease"`
+	KernelVersion          string `json:"kernelversion"`
+	OperatingSystem        string `json:"operatingsystem"`
+	OSMajorRelease         string `json:"operatingsystemmajrelease"`
+	OSRelease              string `json:"operatingsystemrelease"`
+	OSFamily               string `json:"osfamily"`
+	SwapSize               string `json:"swapsize"`
+	TimeZone               string `json:"timezone"`
+	UptimeDays             int    `json:"uptime_days"`
+	UptimeHours            int    `json:"uptime_hours"`
+	UptimeSeconds          int    `json:"uptime_seconds"`
+	HardwareIsa            string `json:"hardwareisa"`
+	HardwareModel          string `json:"hardwaremodel"`
+	ISVirtual              bool   `json:"is_virtual"`
+	MemorySize             string `json:"memorysize"`
+	PhysicalProcessorCount int    `json:"physicalprocessorcount"`
+	ProcessorModel         string `json:"processor0"`
+	CoreCount              int    `json:"processorcount"`
+	Manufacturer           string `json:"manufacturer"`
+	BoardProductName       string `json:"boardproductname"`
+	BoardSerial            string `json:"boardserialnumber"`
+	Domain                 string `json:"domain"`
+	Interfaces             string `json:"interfaces"`
+	Ipaddress              string `json:"ipaddress"`
+	Macaddress             string `json:"macaddress"`
+	Netmask                string `json:"netmask"`
+	Hostname               string `json:"hostname"`
+	Model                  string `json:"productname"`
 }
 
-func sshWorker(host chan string, r chan person, user string, sshKeyPath string, wg *sync.WaitGroup) {
-	var somebody person
+func sshWorker(host chan string, r chan facterOut, user string, sshKeyPath string, wg *sync.WaitGroup) {
+	var facts facterOut
+	sudoCmd := "sudo su - root -c "
+	facterPrefix := "'facter -p -j "
+	facterSlice := []string{"architecture",
+		"kernel",
+		"kernelmajversion",
+		"kernelrelease",
+		"kernelversion",
+		"operatingsystem",
+		"operatingsystemmajrelease",
+		"operatingsystemrelease",
+		"osfamily",
+		"swapsize",
+		"timezone",
+		"uptime_days",
+		"uptime_hours",
+		"uptime_seconds",
+		"hardwareisa",
+		"hardwaremodel",
+		"is_virtual",
+		"memorysize",
+		"physicalprocessorcount",
+		"processor0",
+		"processorcount",
+		"domain",
+		"network",
+		"interfaces",
+		"ipaddress",
+		"macaddress",
+		"netmask",
+		"server_env",
+		"likewisestatus",
+		"likewiseversion",
+		"datacenter",
+		"partitions",
+		"hostname",
+		"manufacturer",
+		"productname",
+		"puppet_lastrun'"}
+
+	facterSuffix := strings.Join(facterSlice, " ")
+	cmd := sudoCmd + facterPrefix + facterSuffix
+
 	client := &sshClient{
 		IP:   <-host,
 		User: user,
@@ -22,14 +93,15 @@ func sshWorker(host chan string, r chan person, user string, sshKeyPath string, 
 		Cert: sshKeyPath,
 	}
 	client.Connect()
-	output := client.RunCmd("cat test.json")
+	//output := client.RunCmd("cat test.json")
+	output := client.RunCmd(cmd)
 	client.Close()
-	err := json.Unmarshal(output, &somebody)
+	err := json.Unmarshal(output, &facts)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	r <- somebody
+	r <- facts
 	wg.Done()
 }
 
@@ -42,9 +114,9 @@ func main() {
 	flag.Parse()
 
 	// Set up variables.
-	hosts := strings.Split(*hostsCli, ",") // {"10.0.0.2", "10.0.0.10"}
+	hosts := strings.Split(*hostsCli, ",")
 	inputs := make(chan string, 5)
-	outputs := make(chan person, len(hosts))
+	outputs := make(chan facterOut, len(hosts))
 	var wg sync.WaitGroup
 
 	// Create ssh workers.
