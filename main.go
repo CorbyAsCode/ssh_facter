@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"strings"
+	"sync"
 )
 
 type person struct {
@@ -10,11 +13,8 @@ type person struct {
 	Location string `json:"location"`
 }
 
-func sshWorker(host chan string, r chan person) {
-	//host := "10.0.0.2"
-
+func sshWorker(host chan string, r chan person, user string, sshKeyPath string, wg *sync.WaitGroup) {
 	var somebody person
-
 	client := &sshClient{
 		IP:   <-host,
 		User: user,
@@ -30,81 +30,44 @@ func sshWorker(host chan string, r chan person) {
 	}
 
 	r <- somebody
-	//return c
-
-	//fmt.Printf("Name: %s, Location: %s\n", somebody.Name, somebody.Location)
-
+	wg.Done()
 }
-
-func concatStuff(h string, out chan<- string) {
-
-	fmt.Println("created goroutine")
-	result := h + "more"
-	//fmt.Println(result)
-	out <- result
-}
-
-func multiplyByTwo(in <-chan int, out chan<- int) {
-	fmt.Println("Initializing goroutine...")
-	num := <-in
-	result := num * 2
-	out <- result
-}
-
-const user = "root"
-const sshKeyPath = "/Users/corbyshaner/.ssh/id_rsa"
 
 func main() {
 
-	/*
-	  There will be an array of hosts
-	  Create a function to be executed as a goroutine
-	  Put each host into a channel
-	  Pull each host off of the channel with a goroutine
-	  Create a new client
-	  Execute as normal
-	  Put output onto a new channel
-	  Pull outputs off of the channel and print them
-	*/
+	// Parse CLI flags.
+	user := flag.String("user", "", "User for ssh")
+	sshKeyPath := flag.String("keypath", "", "ssh private key path")
+	hostsCli := flag.String("hosts", "", "Comma-separated list of hosts")
+	flag.Parse()
 
-	hosts := []string{"10.0.0.2", "10.0.0.10"}
-	inputs := make(chan string, len(hosts))
+	// Set up variables.
+	hosts := strings.Split(*hostsCli, ",") // {"10.0.0.2", "10.0.0.10"}
+	inputs := make(chan string, 5)
 	outputs := make(chan person, len(hosts))
+	var wg sync.WaitGroup
 
-	for i := 1; i < 3; i++ {
-		fmt.Println("Creating goroutine")
-		go func() {
-			//defer wg.Done()
-			var somebody person
-
-			client := &sshClient{
-				IP:   <-inputs,
-				User: user,
-				Port: 22,
-				Cert: sshKeyPath,
-			}
-			client.Connect()
-			output := client.RunCmd("cat test.json")
-			client.Close()
-			err := json.Unmarshal(output, &somebody)
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			outputs <- somebody
-		}()
-
+	// Create ssh workers.
+	for i := 1; i <= len(hosts); i++ {
+		wg.Add(1)
+		go sshWorker(inputs, outputs, *user, *sshKeyPath, &wg)
+		fmt.Printf("Created goroutine #%d\n", i)
 	}
 
-	for _, host := range hosts {
-		fmt.Println("Adding host")
-		inputs <- host
-	}
-	close(inputs)
+	// Push hosts onto inputs channel.
+	// Close the channel to signal that this channel is finished.
+	go func() {
+		for _, host := range hosts {
+			inputs <- string(host)
+		}
+		close(inputs)
+	}()
 
-	for i := 0; i < len(hosts); i++ {
-		fmt.Printf("Processing #%d", i)
+	// Wait for all sshWorkers to finish.
+	wg.Wait()
+	for a := 1; a <= len(hosts); a++ {
 		fmt.Println(<-outputs)
+		fmt.Printf("Processed #%d\n", a)
 	}
 
 }
